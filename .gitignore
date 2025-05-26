@@ -1,0 +1,36 @@
+# Ignore Python virtual environment
+venv/
+.venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore packaging
+*.egg-info/
+.eggs/
+dist/
+build/
+wheels/
+*.egg
+
+# Ignore sensitive files
+.env
+*.env
+.env.*
+
+# Ignore IDE and OS specific files
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Ignore run folders (commonly 'runs' for YOLO)
+runs/
+
+# If you have other specific folders for downloaded packages or outputs,
+# add their names here, followed by a slash. For example:
+# my_output_folder/
+# downloaded_packages/ 

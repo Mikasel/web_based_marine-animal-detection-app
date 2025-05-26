@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %} YOLO Object Detection Dashboard {% endblock %}
+
+{% block body_class %} sidebar-mini {% endblock body_class %}
+
+{% block stylesheets %}
+  <!-- Existing stylesheets -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+  <link rel="stylesheet" href="/static/assets/plugins/fontawesome-free/css/all.min.css">
+  <link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
+  <link rel="stylesheet" href="/static/assets/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css">
+  <link rel="stylesheet" href="/static/assets/plugins/icheck-bootstrap/icheck-bootstrap.min.css">
+  <link rel="stylesheet" href="/static/assets/plugins/jqvmap/jqvmap.min.css">
+  <link rel="stylesheet" href="/static/assets/css/adminlte.min.css">
+  <link rel="stylesheet" href="/static/assets/plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
+  <link rel="stylesheet" href="/static/assets/plugins/daterangepicker/daterangepicker.css">
+  <link rel="stylesheet" href="/static/assets/plugins/summernote/summernote-bs4.min.css">
+  <style>
+    .detection-image {
+        max-width: 100%;
+        height: auto;
+        object-fit: contain;
+        margin-bottom: 20px;
+    }
+    .detection-item {
+        padding: 10px 15px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+        background-color: #28a745;
+        color: white;
+        font-weight: 500;
+    }
+    .card {
+        box-shadow: 0 0 1px rgba(0,0,0,.125), 0 1px 3px rgba(0,0,0,.2);
+        margin-bottom: 1rem;
+    }
+    .card-header {
+        border-bottom: 1px solid rgba(0,0,0,.125);
+        padding: .75rem 1.25rem;
+        background-color: rgba(0,0,0,.03);
+    }
+    .card-title {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 400;
+    }
+    #detection-info h4 {
+        margin-bottom: 15px;
+        font-size: 1.1rem;
+        font-weight: 400;
+    }
+    .class-info-text {
+      height: auto;
+      min-height: 300px;
+      resize: none;
+      background-color: #f8f9fa;
+      border: 1px solid #ced4da;
+      padding: 10px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      overflow: visible;
+    }
+    .class-info-text:read-only {
+      background-color: #f8f9fa;
+    }
+    .yolo-interface {
+      max-width: 100%;
+      height: auto;
+      margin: 20px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+  </style>
+{% endblock stylesheets %}
+
+{% block content %}
+<div class="content-wrapper">
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0 text-dark">YOLO Object Detection Dashboard</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section class="content">
+        <div class="container-fluid">
+            <div class="row">
+                <!-- Upload Section -->
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Upload Image</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="upload-form" method="post" enctype="multipart/form-data">
+                                <div class="form-group">
+                                    <label for="inputfile">Select Image</label>
+                                    <input type="file" name="file" class="form-control-file" id="inputfile" accept="image/*">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Upload & Detect</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detection Results -->
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Detection Results</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="result-container">
+                                <div id="image-container" class="text-center">
+                                    <img id="detection-image" class="detection-image" style="display: none; max-width: 100%; height: auto;" onerror="this.style.display='none'">
+                                </div>
+                                <div id="detection-info">
+                                    <h4>Detected Objects</h4>
+                                    <div id="detection-list"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Class Information Display -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Fish Info</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="class-info-display">
+                                <!-- Class information will be displayed here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock content %}
+
+{% block javascripts %}
+<!-- Existing scripts -->
+<script src="/static/assets/plugins/jquery/jquery.min.js"></script>
+<script src="/static/assets/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/static/assets/js/adminlte.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Function to display class information
+    function displayClassInfo(classInfo) {
+        console.log("Displaying class info:", classInfo);  // Debug log
+        
+        if (classInfo && classInfo.name) {
+            console.log("Found class info with name:", classInfo.name);  // Debug log
+            var classInfoDisplay = `
+                <div class="alert alert-info">
+                    <h4>${classInfo.name}</h4>
+                    <p><strong>Bilimsel Adı:</strong> ${classInfo.scientific_name || 'Belirtilmemiş'}</p>
+                    <p><strong>Açıklama:</strong> ${classInfo.description || 'Belirtilmemiş'}</p>
+                    <p><strong>Yaşam Alanı:</strong> ${classInfo.habitat || 'Belirtilmemiş'}</p>
+                    <p><strong>Boyut:</strong> ${classInfo.size || 'Belirtilmemiş'}</p>
+                    <p><strong>Beslenme:</strong> ${classInfo.diet || 'Belirtilmemiş'}</p>
+                    <p><strong>Koruma Durumu:</strong> ${classInfo.conservation_status || 'Belirtilmemiş'}</p>
+                    <p><strong>Ek Bilgiler:</strong> ${classInfo.additional_info || 'Belirtilmemiş'}</p>
+                </div>
+            `;
+            $('#class-info-display').html(classInfoDisplay);
+        } else {
+            console.log("No valid class info found");  // Debug log
+            $('#class-info-display').html('<div class="alert alert-warning">Balık bilgileri bulunamadı.</div>');
+        }
+    }
+
+    // Function to load the latest detection
+    function loadLatestDetection() {
+        $.ajax({
+            url: '/get_latest_detection',
+            type: 'GET',
+            success: function(response) {
+                console.log("Latest detection response:", response);  // Debug log
+                if (response.success && response.image_path) {
+                    const imgContainer = $('#image-container');
+                    
+                    // Clear previous content
+                    imgContainer.empty();
+                    
+                    // Create and append new image
+                    const newImg = $('<img>', {
+                        id: 'detection-image',
+                        class: 'detection-image',
+                        src: response.image_path + '?t=' + new Date().getTime(), // Add timestamp to prevent caching
+                        alt: 'Detection Result'
+                    });
+                    
+                    imgContainer.append(newImg);
+                    
+                    // Show image container
+                    imgContainer.show();
+                    
+                    // Handle image load errors
+                    newImg.on('error', function() {
+                        console.error('Error loading image:', response.image_path);
+                        imgContainer.html(`
+                            <div class="alert alert-danger">
+                                <h4>Error Loading Image</h4>
+                                <p>Failed to load image from: ${response.image_path}</p>
+                                <p>Please try uploading the image again.</p>
+                            </div>
+                        `);
+                    });
+
+                    // Handle successful image load
+                    newImg.on('load', function() {
+                        console.log('Image loaded successfully:', response.image_path);
+                    });
+
+                    if (response.detections && response.detections.length > 0) {
+                        $('#detection-list').empty();
+                        response.detections.forEach(function(detection) {
+                            console.log("Processing detection:", detection);  // Debug log
+                            $('#detection-list').append(`
+                                <div class="detection-item">
+                                    ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
+                                </div>
+                            `);
+                            displayClassInfo(detection.info);
+                        });
+                    } else {
+                        $('#detection-list').html('<div class="alert alert-info">No objects detected</div>');
+                    }
+                } else {
+                    $('#image-container').html(`
+                        <div class="alert alert-warning">
+                            <h4>No Detection Results</h4>
+                            <p>Please upload an image to see detection results.</p>
+                        </div>
+                    `);
+                    $('#detection-list').empty();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading latest detection:', error);
+                $('#image-container').html(`
+                    <div class="alert alert-danger">
+                        <h4>Error Loading Detection Results</h4>
+                        <p>Status: ${status}</p>
+                        <p>Error: ${error}</p>
+                        <p>Please try refreshing the page or uploading a new image.</p>
+                    </div>
+                `);
+                $('#detection-list').empty();
+            }
+        });
+    }
+
+    // Load latest detection when page loads
+    loadLatestDetection();
+
+    // Handle form submission
+    $('#upload-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var formData = new FormData(this);
+        const imgContainer = $('#image-container');
+        
+        // Show loading state
+        imgContainer.html('<div class="alert alert-info">Processing image...</div>');
+        $('#detection-list').empty();
+        
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    // Clear previous content
+                    imgContainer.empty();
+                    
+                    // Create and append new image
+                    const newImg = $('<img>', {
+                        id: 'detection-image',
+                        class: 'detection-image',
+                        src: response.image_path,
+                        alt: 'Detection Result'
+                    });
+                    
+                    imgContainer.append(newImg);
+                    
+                    // Handle image load errors
+                    newImg.on('error', function() {
+                        console.error('Error loading image:', response.image_path);
+                        imgContainer.html('<div class="alert alert-danger">Error loading image</div>');
+                    });
+
+                    if (response.detections && response.detections.length > 0) {
+                        $('#detection-list').empty();
+                        response.detections.forEach(function(detection) {
+                            $('#detection-list').append(`
+                                <div class="detection-item">
+                                    ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
+                                </div>
+                            `);
+                            displayClassInfo(detection.info);
+                        });
+                    } else {
+                        $('#detection-list').html('<div class="alert alert-info">No objects detected</div>');
+                    }
+                } else {
+                    imgContainer.html('<div class="alert alert-danger">Error processing image</div>');
+                    $('#detection-list').empty();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error processing image:', error);
+                imgContainer.html('<div class="alert alert-danger">Error processing image</div>');
+                $('#detection-list').empty();
+            }
+        });
+    });
+});
+</script>
+{% endblock javascripts %}
+
