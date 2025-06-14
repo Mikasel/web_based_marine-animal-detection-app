@@ -2,6 +2,7 @@ import argparse
 import io
 from PIL import Image
 import datetime
+import base64
 
 import torch
 import cv2
@@ -185,12 +186,12 @@ CLASS_INFO = {
         'size': 'Average 25-35 cm, maximum 130 cm',
         'diet': 'Small fish, squid, and other marine creatures',
         'conservation_status': 'Common',
-        'additional_info': 'Bluefish is found in all of Turkey\'s seas. It is particularly common in the Black Sea and Marmara. It is consumed grilled, steamed, and pan-fried. It is especially more delicious during autumn months. It is a schooling fish that moves quickly. It is caught using purse seine and longline fishing methods. It is one of the most valuable fish species in Turkey.'
+        'additional_info': 'Bluefish is found in all of Turkey\'s seas. It is particularly common in the Black Sea and Marmara. It is consumed grilled, steamed, and pan fried. It is especially more delicious during autumn months. It is a schooling fish that moves quickly. It is caught using purse seine and longline fishing methods. It is one of the most valuable fish species in Turkey.'
     },
     'skipjack_tuna': {
         'name': 'Skipjack Tuna',
         'scientific_name': 'Euthynnus alletteratus',
-        'description': 'Skipjack tuna is a medium-sized tuna species with a streamlined body and dark blue-black back. It has distinctive dark stripes on its back and silver-white sides. The body is elongated and laterally compressed with a forked tail. It is known for its fast swimming capabilities and is one of the most abundant tuna species.',
+        'description': 'Skipjack tuna is a medium-sized tuna species with a streamlined body and dark blue-black back. It has distinctive dark stripes on its back and silver/white sides. The body is elongated and laterally compressed with a forked tail. It is known for its fast swimming capabilities and is one of the most abundant tuna species.',
         'habitat': 'Open oceans, coastal waters, 0-200 meters depth',
         'size': 'Average 40-60 cm, maximum 100 cm',
         'diet': 'Small fish, squid, crustaceans, and plankton',
@@ -235,9 +236,9 @@ def predict_img():
         predict_img.imgpath = filename
         print("printing predict_img :::::: ", predict_img)
                                            
-        file_extension = filename.rsplit('.', 1)[1].lower() 
+        file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'jpg'
         
-        if file_extension == 'jpg':
+        if file_extension in ['jpg', 'jpeg', 'png']:
             img = cv2.imread(filepath)
             if img is None:
                 return jsonify({"error": "Error reading image file"}), 400
