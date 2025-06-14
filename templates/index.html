@@ -71,6 +71,18 @@
       border: 1px solid #ddd;
       border-radius: 4px;
     }
+    #camera-feed {
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+      margin: 20px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      display: none;
+    }
+    .camera-controls {
+      margin: 10px 0;
+    }
   </style>
 {% endblock stylesheets %}
 
@@ -103,6 +115,20 @@
                                 </div>
                                 <button type="submit" class="btn btn-primary">Upload & Detect</button>
                             </form>
+                            
+                            <!-- Camera Section -->
+                            <div class="mt-4">
+                                <h3 class="card-title">Camera Detection</h3>
+                                <div class="camera-controls">
+                                    <button id="toggle-camera" class="btn btn-success">
+                                        <i class="fas fa-camera"></i> Start Camera
+                                    </button>
+                                    <button id="capture-frame" class="btn btn-info" style="display: none;">
+                                        <i class="fas fa-camera-retro"></i> Capture & Detect
+                                    </button>
+                                </div>
+                                <video id="camera-feed" autoplay playsinline></video>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -156,27 +182,109 @@
 
 <script>
 $(document).ready(function() {
+    let stream = null;
+    const video = document.getElementById('camera-feed');
+    const toggleButton = document.getElementById('toggle-camera');
+    const captureButton = document.getElementById('capture-frame');
+    let isCameraOn = false;
+
+    // Function to toggle camera
+    async function toggleCamera() {
+        if (!isCameraOn) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.style.display = 'block';
+                toggleButton.innerHTML = '<i class="fas fa-camera-slash"></i> Stop Camera';
+                captureButton.style.display = 'inline-block';
+                isCameraOn = true;
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                alert('Error accessing camera. Please make sure you have granted camera permissions.');
+            }
+        } else {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                video.style.display = 'none';
+                toggleButton.innerHTML = '<i class="fas fa-camera"></i> Start Camera';
+                captureButton.style.display = 'none';
+                isCameraOn = false;
+            }
+        }
+    }
+
+    // Function to capture frame and send for detection
+    async function captureAndDetect() {
+        if (!isCameraOn) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        
+        // Convert canvas to blob
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('file', blob, 'camera-capture.jpg');
+
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        // Update detection results
+                        $('#detection-image').attr('src', result.image_path + '?t=' + new Date().getTime());
+                        $('#detection-image').show();
+                        
+                        // Update detection list
+                        $('#detection-list').empty();
+                        result.detections.forEach(detection => {
+                            $('#detection-list').append(`
+                                <div class="detection-item">
+                                    ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
+                                </div>
+                            `);
+                            displayClassInfo(detection.info);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing frame:', error);
+                alert('Error processing frame. Please try again.');
+            }
+        }, 'image/jpeg');
+    }
+
+    // Event listeners
+    toggleButton.addEventListener('click', toggleCamera);
+    captureButton.addEventListener('click', captureAndDetect);
+
     // Function to display class information
     function displayClassInfo(classInfo) {
-        console.log("Displaying class info:", classInfo);  // Debug log
+        console.log("Displaying class info:", classInfo);
         
         if (classInfo && classInfo.name) {
-            console.log("Found class info with name:", classInfo.name);  // Debug log
+            console.log("Found class info with name:", classInfo.name);
             var classInfoDisplay = `
                 <div class="alert alert-info">
                     <h4>${classInfo.name}</h4>
-                    <p><strong>Bilimsel Adı:</strong> ${classInfo.scientific_name || 'Belirtilmemiş'}</p>
-                    <p><strong>Açıklama:</strong> ${classInfo.description || 'Belirtilmemiş'}</p>
-                    <p><strong>Yaşam Alanı:</strong> ${classInfo.habitat || 'Belirtilmemiş'}</p>
-                    <p><strong>Boyut:</strong> ${classInfo.size || 'Belirtilmemiş'}</p>
-                    <p><strong>Beslenme:</strong> ${classInfo.diet || 'Belirtilmemiş'}</p>
-                    <p><strong>Koruma Durumu:</strong> ${classInfo.conservation_status || 'Belirtilmemiş'}</p>
-                    <p><strong>Ek Bilgiler:</strong> ${classInfo.additional_info || 'Belirtilmemiş'}</p>
+                    <p><strong>Scientific Name:</strong> ${classInfo.scientific_name || 'Belirtilmemiş'}</p>
+                    <p><strong>Description:</strong> ${classInfo.description || 'Belirtilmemiş'}</p>
+                    <p><strong>Habitat:</strong> ${classInfo.habitat || 'Belirtilmemiş'}</p>
+                    <p><strong>Size:</strong> ${classInfo.size || 'Belirtilmemiş'}</p>
+                    <p><strong>Diet:</strong> ${classInfo.diet || 'Belirtilmemiş'}</p>
+                    <p><strong>Conservation Status:</strong> ${classInfo.conservation_status || 'Belirtilmemiş'}</p>
+                    <p><strong>Additional info:</strong> ${classInfo.additional_info || 'Belirtilmemiş'}</p>
                 </div>
             `;
             $('#class-info-display').html(classInfoDisplay);
         } else {
-            console.log("No valid class info found");  // Debug log
+            console.log("No valid class info found");
             $('#class-info-display').html('<div class="alert alert-warning">Balık bilgileri bulunamadı.</div>');
         }
     }
