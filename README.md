@@ -8,7 +8,7 @@ This project is a web application designed to detect marine animals in images up
 </p>
 
 <p align="center">
-  <em><strong>Figure 1:</strong> Real-time marine species detection dashboard featuring YOLO-based object identification and detailed biological information.</em>
+  <em><strong>Figure 1:</strong> Marine species detection dashboard featuring object identification and detailed biological information.</em>
 </p>
 
 ---
