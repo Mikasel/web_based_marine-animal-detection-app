@@ -3,6 +3,15 @@
 This project is a web application designed to detect marine animals in images uploaded by users. It utilizes a machine learning model (likely YOLO or a similar object detection model) to identify various marine species.
 
 ## Features (Example - Please update)
+<p align="center">
+  <img src="assets/dashboard.jpg" width="100%" alt="Marine Animal Detection Dashboard">
+</p>
+
+<p align="center">
+  <em><strong>Figure 1:</strong> Real-time marine species detection dashboard featuring YOLO-based object identification and detailed biological information.</em>
+</p>
+
+---
 
 *   User-friendly web interface for image uploads.
 *   Real-time (or near real-time) detection of marine animals in uploaded images.
