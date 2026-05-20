@@ -141,8 +141,8 @@
                         </div>
                         <div class="card-body">
                             <div id="result-container">
-                                <div id="image-container" class="text-center">
-                                    <img id="detection-image" class="detection-image" style="display: none; max-width: 100%; height: auto;" onerror="this.style.display='none'">
+                                <div id="image-container" class="text-center text-muted py-4">
+                                    <p class="mb-0">Upload an image to run detection.</p>
                                 </div>
                                 <div id="detection-info">
                                     <h4>Detected Objects</h4>
@@ -162,8 +162,8 @@
                             <h3 class="card-title">Fish Info</h3>
                         </div>
                         <div class="card-body">
-                            <div id="class-info-display">
-                                <!-- Class information will be displayed here -->
+                            <div id="class-info-display" class="text-muted">
+                                <p class="mb-0">Fish information will appear here after detection.</p>
                             </div>
                         </div>
                     </div>
@@ -237,20 +237,10 @@ $(document).ready(function() {
                 if (response.ok) {
                     const result = await response.json();
                     if (result.success) {
-                        // Update detection results
-                        $('#detection-image').attr('src', result.image_path + '?t=' + new Date().getTime());
-                        $('#detection-image').show();
-                        
-                        // Update detection list
-                        $('#detection-list').empty();
-                        result.detections.forEach(detection => {
-                            $('#detection-list').append(`
-                                <div class="detection-item">
-                                    ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
-                                </div>
-                            `);
-                            displayClassInfo(detection.info);
-                        });
+                        showDetectionResults(result);
+                    } else {
+                        const msg = result.error || 'Error processing image';
+                        $('#image-container').html(`<div class="alert alert-danger">${msg}</div>`);
                     }
                 }
             } catch (error) {
@@ -289,90 +279,50 @@ $(document).ready(function() {
         }
     }
 
-    // Function to load the latest detection
-    function loadLatestDetection() {
-        $.ajax({
-            url: '/get_latest_detection',
-            type: 'GET',
-            success: function(response) {
-                console.log("Latest detection response:", response);  // Debug log
-                if (response.success && response.image_path) {
-                    const imgContainer = $('#image-container');
-                    
-                    // Clear previous content
-                    imgContainer.empty();
-                    
-                    // Create and append new image
-                    const newImg = $('<img>', {
-                        id: 'detection-image',
-                        class: 'detection-image',
-                        src: response.image_path + '?t=' + new Date().getTime(), // Add timestamp to prevent caching
-                        alt: 'Detection Result'
-                    });
-                    
-                    imgContainer.append(newImg);
-                    
-                    // Show image container
-                    imgContainer.show();
-                    
-                    // Handle image load errors
-                    newImg.on('error', function() {
-                        console.error('Error loading image:', response.image_path);
-                        imgContainer.html(`
-                            <div class="alert alert-danger">
-                                <h4>Error Loading Image</h4>
-                                <p>Failed to load image from: ${response.image_path}</p>
-                                <p>Please try uploading the image again.</p>
-                            </div>
-                        `);
-                    });
 
-                    // Handle successful image load
-                    newImg.on('load', function() {
-                        console.log('Image loaded successfully:', response.image_path);
-                    });
-
-                    if (response.detections && response.detections.length > 0) {
-                        $('#detection-list').empty();
-                        response.detections.forEach(function(detection) {
-                            console.log("Processing detection:", detection);  // Debug log
-                            $('#detection-list').append(`
-                                <div class="detection-item">
-                                    ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
-                                </div>
-                            `);
-                            displayClassInfo(detection.info);
-                        });
-                    } else {
-                        $('#detection-list').html('<div class="alert alert-info">No objects detected</div>');
-                    }
-                } else {
-                    $('#image-container').html(`
-                        <div class="alert alert-warning">
-                            <h4>No Detection Results</h4>
-                            <p>Please upload an image to see detection results.</p>
-                        </div>
-                    `);
-                    $('#detection-list').empty();
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error loading latest detection:', error);
-                $('#image-container').html(`
-                    <div class="alert alert-danger">
-                        <h4>Error Loading Detection Results</h4>
-                        <p>Status: ${status}</p>
-                        <p>Error: ${error}</p>
-                        <p>Please try refreshing the page or uploading a new image.</p>
-                    </div>
-                `);
-                $('#detection-list').empty();
-            }
-        });
+    function resetDetectionView() {
+        $('#image-container').html('<p class="text-muted mb-0">Upload an image to run detection.</p>');
+        $('#detection-list').empty();
+        $('#class-info-display').html(
+            '<p class="text-muted mb-0">Fish information will appear here after detection.</p>'
+        );
     }
 
-    // Load latest detection when page loads
-    loadLatestDetection();
+    function showDetectionResults(response) {
+        const imgContainer = $('#image-container');
+        imgContainer.empty();
+
+        const newImg = $('<img>', {
+            id: 'detection-image',
+            class: 'detection-image',
+            src: response.image_path + '?t=' + new Date().getTime(),
+            alt: 'Detection Result'
+        });
+        imgContainer.append(newImg);
+
+        newImg.on('error', function() {
+            imgContainer.html('<div class="alert alert-danger">Error loading image</div>');
+        });
+
+        $('#detection-list').empty();
+        if (response.detections && response.detections.length > 0) {
+            response.detections.forEach(function(detection) {
+                $('#detection-list').append(`
+                    <div class="detection-item">
+                        ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
+                    </div>
+                `);
+                displayClassInfo(detection.info);
+            });
+        } else {
+            $('#detection-list').html('<div class="alert alert-info">No objects detected</div>');
+            $('#class-info-display').html(
+                '<p class="text-muted mb-0">No fish detected in this image.</p>'
+            );
+        }
+    }
+
+    resetDetectionView();
 
     // Handle form submission
     $('#upload-form').on('submit', function(e) {
@@ -384,6 +334,7 @@ $(document).ready(function() {
         // Show loading state
         imgContainer.html('<div class="alert alert-info">Processing image...</div>');
         $('#detection-list').empty();
+        $('#class-info-display').html('<p class="text-muted mb-0">Detecting...</p>');
         
         $.ajax({
             url: '/',
@@ -393,49 +344,27 @@ $(document).ready(function() {
             contentType: false,
             success: function(response) {
                 if (response.success) {
-                    // Clear previous content
-                    imgContainer.empty();
-                    
-                    // Create and append new image
-                    const newImg = $('<img>', {
-                        id: 'detection-image',
-                        class: 'detection-image',
-                        src: response.image_path,
-                        alt: 'Detection Result'
-                    });
-                    
-                    imgContainer.append(newImg);
-                    
-                    // Handle image load errors
-                    newImg.on('error', function() {
-                        console.error('Error loading image:', response.image_path);
-                        imgContainer.html('<div class="alert alert-danger">Error loading image</div>');
-                    });
-
-                    if (response.detections && response.detections.length > 0) {
-                        $('#detection-list').empty();
-                        response.detections.forEach(function(detection) {
-                            $('#detection-list').append(`
-                                <div class="detection-item">
-                                    ${detection.class} - ${(detection.confidence * 100).toFixed(2)}%
-                                </div>
-                            `);
-                            displayClassInfo(detection.info);
-                        });
-                    } else {
-                        $('#detection-list').html('<div class="alert alert-info">No objects detected</div>');
-                    }
+                    showDetectionResults(response);
                 } else {
-                    imgContainer.html('<div class="alert alert-danger">Error processing image</div>');
+                    const msg = response.error || 'Error processing image';
+                    imgContainer.html(`<div class="alert alert-danger">${msg}</div>`);
                     $('#detection-list').empty();
                 }
             },
             error: function(xhr, status, error) {
                 console.error('Error processing image:', error);
-                imgContainer.html('<div class="alert alert-danger">Error processing image</div>');
+                const msg = (xhr.responseJSON && xhr.responseJSON.error) || error || 'Error processing image';
+                imgContainer.html(`<div class="alert alert-danger">${msg}</div>`);
                 $('#detection-list').empty();
             }
         });
+    });
+
+    // Run detection as soon as the user selects an image
+    $('#inputfile').on('change', function() {
+        if (this.files && this.files.length > 0) {
+            $('#upload-form').trigger('submit');
+        }
     });
 });
 </script>
