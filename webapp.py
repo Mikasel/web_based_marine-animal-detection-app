@@ -514,7 +514,7 @@ def get_latest_detection_image():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Flask app exposing yolov9 models")
-    parser.add_argument("--port", default=5000, type=int, help="port number")
+    parser.add_argument("--port", default=7860, type=int, help="port number")
     args = parser.parse_args()
     model = get_yolo_model()
 
