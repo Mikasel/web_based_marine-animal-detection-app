@@ -25,6 +25,110 @@ from ultralytics import YOLO
 
 
 app = Flask(__name__)
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(APP_ROOT, 'my_model.pt')
+DETECT_DIR = os.path.join(APP_ROOT, 'runs', 'detect')
+_yolo_model = None
+
+# Model class names / Turkish aliases -> CLASS_INFO keys
+CLASS_ALIAS_TO_INFO_KEY = {
+    'levrek': 'european_seabass',
+    'mirmir': 'sand_steenbras',
+    'barbunya': 'red_Mullet',
+    'karagoz': 'two_banded_seabream',
+    'kefal': 'flathead_grey_mullet',
+    'kupez': 'bogue',
+    'palamut': 'atlantic_bonito',
+    'sardalya': 'Sardalya',
+    'uskumru': 'mackerel',
+    'cipura': 'gilt_head_bream',
+    'iskorpit': 'scorpion_fish',
+    'istavrit': 'atlantic_horse_mackerel',
+    'izmarit': 'blotched_picarel',
+    'denizati': 'sea_horse',
+    'kirlangic': 'tub_gurnard',
+    'lufer': 'bluefish',
+}
+
+
+def get_yolo_model():
+    global _yolo_model
+    if _yolo_model is None:
+        if not os.path.isfile(MODEL_PATH):
+            raise FileNotFoundError(
+                f"Model weights not found at {MODEL_PATH}. "
+                "Place my_model.pt in the project root."
+            )
+        _yolo_model = YOLO(MODEL_PATH)
+    return _yolo_model
+
+
+def normalize_class_name(class_name):
+    normalized = class_name.lower().strip().replace(' ', '_')
+    for tr_char, en_char in (
+        ('ı', 'i'), ('ğ', 'g'), ('ü', 'u'), ('ş', 's'),
+        ('ö', 'o'), ('ç', 'c'), ('İ', 'i'),
+    ):
+        normalized = normalized.replace(tr_char, en_char)
+    return normalized
+
+
+def resolve_class_info(class_name):
+    normalized = normalize_class_name(class_name)
+    info_key = CLASS_ALIAS_TO_INFO_KEY.get(normalized, normalized)
+    if info_key in CLASS_INFO:
+        return CLASS_INFO[info_key]
+    if class_name in CLASS_INFO:
+        return CLASS_INFO[class_name]
+    return {}
+
+
+def build_detections(model, results):
+    detections = []
+    for result in results:
+        boxes = result.boxes
+        for box in boxes:
+            cls = int(box.cls[0])
+            conf = float(box.conf[0])
+            class_name = model.names[cls]
+            detections.append({
+                'class': class_name,
+                'confidence': conf,
+                'info': resolve_class_info(class_name),
+            })
+    return detections
+
+
+def run_detection(model, source):
+    os.makedirs(DETECT_DIR, exist_ok=True)
+    return model.predict(source=source, save=True, project=DETECT_DIR, exist_ok=True)
+
+
+def get_latest_detection_artifacts():
+    if not os.path.isdir(DETECT_DIR):
+        return None, None
+    subfolders = [
+        f for f in os.listdir(DETECT_DIR)
+        if os.path.isdir(os.path.join(DETECT_DIR, f))
+    ]
+    if not subfolders:
+        return None, None
+    latest_subfolder = max(
+        subfolders,
+        key=lambda x: os.path.getctime(os.path.join(DETECT_DIR, x)),
+    )
+    latest_dir_path = os.path.join(DETECT_DIR, latest_subfolder)
+    image_files = [
+        f for f in os.listdir(latest_dir_path)
+        if f.lower().endswith(('.jpg', '.png', '.jpeg'))
+    ]
+    if not image_files:
+        return None, None
+    latest_image = max(
+        image_files,
+        key=lambda x: os.path.getctime(os.path.join(latest_dir_path, x)),
+    )
+    return latest_subfolder, latest_image
 
 # Class information dictionary
 CLASS_INFO = {
@@ -206,173 +310,91 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static', 'assets'),
                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-@app.route("/")
-def hello_world():
-    return render_template('index.html', class_info=CLASS_INFO)
-
 @app.route("/", methods=["GET", "POST"])
 def predict_img():
     if request.method == "POST":
-        if 'file' not in request.files:
-            return jsonify({"error": "No file part"}), 400
-            
-        f = request.files['file']
-        if f.filename == '':
-            return jsonify({"error": "No selected file"}), 400
-            
-        # Sanitize the filename
-        filename = secure_filename(f.filename)
-        filename = filename.replace(' ', '_').replace('(', '').replace(')', '')
-        
-        basepath = os.path.dirname(__file__)
-        filepath = os.path.join(basepath, 'uploads', filename)
-        print("upload folder is ", filepath) 
-        
-        # Ensure uploads directory exists
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
-        f.save(filepath)
-        global imgpath
-        predict_img.imgpath = filename
-        print("printing predict_img :::::: ", predict_img)
-                                           
-        file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'jpg'
-        
-        if file_extension in ['jpg', 'jpeg', 'png']:
-            img = cv2.imread(filepath)
-            if img is None:
-                return jsonify({"error": "Error reading image file"}), 400
+        try:
+            if 'file' not in request.files:
+                return jsonify({"success": False, "error": "No file part"}), 400
 
-            # Perform the detection
-            model = YOLO('my_model.pt')
-            results = model(img, save=True)
-            
-            # Get the latest detection folder
-            folder_path = 'runs/detect'
-            subfolders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
-            if not subfolders:
-                return jsonify({"error": "No detection results found"}), 400
-                
-            latest_subfolder = max(subfolders, key=lambda x: os.path.getctime(os.path.join(folder_path, x)))
-            
-            # Look for image0.jpg in the latest detection folder
-            result_image_path = os.path.join(folder_path, latest_subfolder, 'image0.jpg')
-            if not os.path.exists(result_image_path):
-                return jsonify({"error": "Detection image not found"}), 404
-            
-            # Process detection results
-            detections = []
-            for result in results:
-                boxes = result.boxes
-                for box in boxes:
-                    cls = int(box.cls[0])
-                    conf = float(box.conf[0])
-                    class_name = model.names[cls]
-                    
-                    # Case insensitive matching for all Turkish fish names
-                    class_name_lower = class_name.lower()
-                    class_info = None
-                    
-                    # Map lowercase names to proper Turkish names
-                    turkish_name_mapping = {
-                        'levrek': 'Levrek',
-                        'mirmir': 'Mirmir',
-                        'barbunya': 'Barbunya',
-                        'karagoz': 'Karagöz',
-                        'kefal': 'Kefal',
-                        'kupez': 'Kupes',
-                        'palamut': 'Palamut',
-                        'sardalya': 'Sardalya',
-                        'uskumru': 'Uskumru',
-                        'cipura': 'Çipura',
-                        'iskorpit': 'İskorpit',
-                        'istavrit': 'İstavrit',
-                        'izmarit': 'İzmarit',
-                        'denizati': 'Denizatı',
-                        'kırlangıç': 'Kırlangıç',
-                        'kirlangic': 'Kırlangıç',
-                        'lüfer': 'Lüfer',
-                        'lufer': 'Lüfer'
-                    }
-                    
-                    if class_name_lower in turkish_name_mapping:
-                        proper_name = turkish_name_mapping[class_name_lower]
-                        class_info = CLASS_INFO[proper_name]
-                    else:
-                        class_info = CLASS_INFO.get(class_name, {})
-                    
-                    detections.append({
-                        'class': class_name,
-                        'confidence': conf,
-                        'info': class_info
-                    })
-            
-            # Return the relative path for the frontend
-            relative_image_path = f"/detection/{latest_subfolder}/image0.jpg"
-            
-            return jsonify({
-                'success': True,
-                'image_path': relative_image_path,
-                'detections': detections
-            })
-        elif file_extension == 'mp4': 
-            video_path = filepath
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                return "Error opening video file", 400
+            f = request.files['file']
+            if f.filename == '':
+                return jsonify({"success": False, "error": "No selected file"}), 400
 
-            # get video dimensions
-            frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                                
-            # Define the codec and create VideoWriter object
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter('output.mp4', fourcc, 30.0, (frame_width, frame_height))
-            
-            # initialize the YOLOv11 model here
-            model = YOLO('my_model.pt')
-            
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break                                                      
+            filename = secure_filename(f.filename)
+            filename = filename.replace(' ', '_').replace('(', '').replace(')', '')
 
-                results = model(frame, save=True)
-                print(results)
-                cv2.waitKey(1)
+            filepath = os.path.join(APP_ROOT, 'uploads', filename)
+            print("upload folder is ", filepath)
 
-                res_plotted = results[0].plot()
-                cv2.imshow("result", res_plotted)
-                
-                out.write(res_plotted)
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            f.save(filepath)
+            predict_img.imgpath = filename
 
-                if cv2.waitKey(1) == ord('q'):
-                    break
+            file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'jpg'
 
-            return video_feed()
-        else:
-            return jsonify({"error": "Unsupported file format"}), 400
+            if file_extension in ['jpg', 'jpeg', 'png']:
+                img = cv2.imread(filepath)
+                if img is None:
+                    return jsonify({"success": False, "error": "Error reading image file"}), 400
+
+                model = get_yolo_model()
+                results = run_detection(model, filepath)
+
+                latest_subfolder, result_image = get_latest_detection_artifacts()
+                if not latest_subfolder or not result_image:
+                    return jsonify({"success": False, "error": "No detection results found"}), 400
+
+                detections = build_detections(model, results)
+                relative_image_path = f"/detection/{latest_subfolder}/{result_image}"
+
+                return jsonify({
+                    'success': True,
+                    'image_path': relative_image_path,
+                    'detections': detections
+                })
+            elif file_extension == 'mp4':
+                video_path = filepath
+                cap = cv2.VideoCapture(video_path)
+                if not cap.isOpened():
+                    return jsonify({"success": False, "error": "Error opening video file"}), 400
+
+                frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(
+                    os.path.join(APP_ROOT, 'output.mp4'),
+                    fourcc, 30.0, (frame_width, frame_height),
+                )
+
+                model = get_yolo_model()
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    results = run_detection(model, frame)
+                    res_plotted = results[0].plot()
+                    out.write(res_plotted)
+                    if cv2.waitKey(1) == ord('q'):
+                        break
+
+                cap.release()
+                out.release()
+                return video_feed()
+            else:
+                return jsonify({"success": False, "error": "Unsupported file format"}), 400
+        except FileNotFoundError as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+        except Exception as e:
+            print(f"Error in predict_img: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
     return render_template('index.html', class_info=CLASS_INFO)
 
 def get_latest_detection_path():
     try:
-        folder_path = 'runs/detect'
-        if not os.path.exists(folder_path):
+        latest_subfolder, latest_image = get_latest_detection_artifacts()
+        if not latest_subfolder or not latest_image:
             return None
-            
-        subfolders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
-        if not subfolders:
-            return None
-            
-        latest_subfolder = max(subfolders, key=lambda x: os.path.getctime(os.path.join(folder_path, x)))
-        latest_dir_path = os.path.join(folder_path, latest_subfolder)
-        
-        # Get the most recent image file
-        image_files = [f for f in os.listdir(latest_dir_path) if f.endswith(('.jpg', '.png', '.jpeg'))]
-        if not image_files:
-            return None
-            
-        latest_image = max(image_files, key=lambda x: os.path.getctime(os.path.join(latest_dir_path, x)))
         return os.path.join(latest_subfolder, latest_image)
     except Exception as e:
         print(f"Error getting latest detection path: {str(e)}")
@@ -382,7 +404,7 @@ def get_latest_detection_path():
 def serve_detection(subfolder, filename):
     try:
         # Construct the full path to the detection image
-        detection_path = os.path.join('runs', 'detect', subfolder, filename)
+        detection_path = os.path.join(DETECT_DIR, subfolder, filename)
         print(f"Attempting to serve image from: {detection_path}")  # Debug log
         
         # Check if the file exists
@@ -429,8 +451,7 @@ def display(filename):
         
 
 def get_frame():
-    folder_path = os.getcwd()
-    mp4_files = 'output.mp4'
+    mp4_files = os.path.join(APP_ROOT, 'output.mp4')
     video = cv2.VideoCapture(mp4_files)  # detected video path
     while True:
         success, image = video.read()
@@ -457,77 +478,23 @@ def video_feed():
 @app.route('/get_latest_detection')
 def get_latest_detection():
     try:
-        # Get the most recent predict directory
-        predict_dirs = [d for d in os.listdir('runs/detect') if d.startswith('predict')]
-        if not predict_dirs:
+        latest_dir, latest_image = get_latest_detection_artifacts()
+        if not latest_dir or not latest_image:
             return jsonify({'success': False, 'error': 'No detections found'})
-        
-        latest_dir = max(predict_dirs, key=lambda x: int(x.replace('predict', '')))
-        latest_dir_path = os.path.join('runs/detect', latest_dir)
-        
-        # Look for image0.jpg in the latest directory
-        image_path = os.path.join(latest_dir_path, 'image0.jpg')
-        if not os.path.exists(image_path):
-            return jsonify({'success': False, 'error': 'No image found in latest detection'})
-        
-        relative_path = f'/detection/{latest_dir}/image0.jpg'
-        
-        # Get detection information from the latest detection
-        detections = []
-        model = YOLO('my_model.pt')
-        results = model(image_path)
-        
-        for result in results:
-            boxes = result.boxes
-            for box in boxes:
-                cls = int(box.cls[0])
-                conf = float(box.conf[0])
-                class_name = model.names[cls]
-                
-                # Case insensitive matching for all Turkish fish names
-                class_name_lower = class_name.lower()
-                class_info = None
-                
-                # Map lowercase names to proper Turkish names
-                turkish_name_mapping = {
-                    'levrek': 'Levrek',
-                    'mirmir': 'Mirmir',
-                    'barbunya': 'Barbunya',
-                    'karagoz': 'Karagöz',
-                    'kefal': 'Kefal',
-                    'kupez': 'Kupes',
-                    'palamut': 'Palamut',
-                    'sardalya': 'Sardalya',
-                    'uskumru': 'Uskumru',
-                    'cipura': 'Çipura',
-                    'iskorpit': 'İskorpit',
-                    'istavrit': 'İstavrit',
-                    'izmarit': 'İzmarit',
-                    'denizati': 'Denizatı',
-                    'kırlangıç': 'Kırlangıç',
-                    'kirlangic': 'Kırlangıç',
-                    'lüfer': 'Lüfer',
-                    'lufer': 'Lüfer'
-                }
-                
-                if class_name_lower in turkish_name_mapping:
-                    proper_name = turkish_name_mapping[class_name_lower]
-                    class_info = CLASS_INFO[proper_name]
-                else:
-                    class_info = CLASS_INFO.get(class_name, {})
-                
-                detections.append({
-                    'class': class_name,
-                    'confidence': conf,
-                    'info': class_info
-                })
-        
+
+        image_path = os.path.join(DETECT_DIR, latest_dir, latest_image)
+        relative_path = f'/detection/{latest_dir}/{latest_image}'
+
+        model = get_yolo_model()
+        results = model.predict(source=image_path, save=False)
+        detections = build_detections(model, results)
+
         return jsonify({
             'success': True,
             'image_path': relative_path,
             'detections': detections
         })
-        
+
     except Exception as e:
         print(f"Error in get_latest_detection: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
@@ -549,8 +516,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Flask app exposing yolov9 models")
     parser.add_argument("--port", default=5000, type=int, help="port number")
     args = parser.parse_args()
-    model = YOLO('my_model.pt')
-    
+    model = get_yolo_model()
+
     # Print class names from the model
     print("\nClass names in the model:")
     for idx, name in model.names.items():
