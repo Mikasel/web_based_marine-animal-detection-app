@@ -1,24 +1,10 @@
 import argparse
-import io
-from PIL import Image
-import datetime
-import base64
 
-import torch
 import cv2
-import numpy as np
-import tensorflow as tf
-from re import DEBUG, sub
 from flask import Flask, render_template, request, redirect, send_file, url_for, Response, send_from_directory, jsonify
 from werkzeug.utils import secure_filename, send_from_directory
 import os
-import subprocess
-from subprocess import Popen
-import re
-import requests
-import shutil
 import time
-import glob
 
 
 from ultralytics import YOLO
