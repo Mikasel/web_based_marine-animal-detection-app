@@ -501,13 +501,17 @@ def get_latest_detection_image():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Flask app exposing yolov9 models")
     parser.add_argument("--port", default=7860, type=int, help="port number")
+    parser.add_argument("--host", default="0.0.0.0", type=str, help="host address")
     args = parser.parse_args()
-    model = get_yolo_model()
+    try:
+        model = get_yolo_model()
 
-    # Print class names from the model
-    print("\nClass names in the model:")
-    for idx, name in model.names.items():
-        print(f"Class {idx}: {name}")
-    print("\n")
+        # Print class names from the model
+        print("\nClass names in the model:")
+        for idx, name in model.names.items():
+            print(f"Class {idx}: {name}")
+        print("\n")
+    except Exception as e:
+        print(f"Error loading model: {str(e)}")    
     
     app.run(host="0.0.0.0", port=args.port) 
